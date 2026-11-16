@@ -1,0 +1,10 @@
+# Dibaca otomatis oleh "docker compose up" di laptop (uji lokal).
+# Coolify memakai docker-compose.yml saja, sehingga port host tidak bentrok
+# dengan dashboard Coolify (port 8000).
+services:
+  app:
+    ports:
+      - "3000:3000"
+  admin:
+    ports:
+      - "8000:8000"

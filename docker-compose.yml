@@ -16,9 +16,8 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    # Untuk uji lokal saja; di Coolify domain diatur lewat UI (proxy Traefik)
-    ports:
-      - "3000:3000"
+    # Port host untuk uji lokal ada di docker-compose.override.yml.
+    # Di Coolify, domain diatur lewat UI (proxy Traefik), tanpa publish port.
 
   admin:
     build: ./admin-laravel
@@ -39,8 +38,6 @@ services:
       app:
         condition: service_healthy   # tabel dibuat oleh app Node.js saat start
     restart: unless-stopped
-    ports:
-      - "8000:8000"
 
   db:
     image: postgres:16-alpine
