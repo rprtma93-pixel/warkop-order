@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log
+.git
+.env
+README.md
+docker-compose.yml
+admin-laravel

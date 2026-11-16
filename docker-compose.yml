@@ -1,0 +1,61 @@
+# Tiga service: app (Node.js - pelanggan), admin (Laravel - dashboard), db (PostgreSQL)
+# Dipakai untuk deploy di Coolify (Resource -> Docker Compose) maupun uji coba lokal:
+#   docker compose up --build
+services:
+  app:
+    build: .
+    environment:
+      - PORT=3000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ganti-password-ini}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-warkop}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-warkop_secret}
+      - DB_NAME=${POSTGRES_DB:-warkop}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    # Untuk uji lokal saja; di Coolify domain diatur lewat UI (proxy Traefik)
+    ports:
+      - "3000:3000"
+
+  admin:
+    build: ./admin-laravel
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ganti-password-ini}
+      - APP_KEY=${APP_KEY:-}
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=${POSTGRES_DB:-warkop}
+      - DB_USERNAME=${POSTGRES_USER:-warkop}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-warkop_secret}
+      - SESSION_DRIVER=file
+      - CACHE_STORE=file
+      - QUEUE_CONNECTION=sync
+    depends_on:
+      app:
+        condition: service_healthy   # tabel dibuat oleh app Node.js saat start
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-warkop}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-warkop_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-warkop}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-warkop} -d $${POSTGRES_DB:-warkop}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

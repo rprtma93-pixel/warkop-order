@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warkop Online - Pesan Menu</title>
+<style>
+  :root { --brown:#6f4e37; --cream:#faf5ef; --accent:#c8873a; --ink:#2b2118; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--cream); color:var(--ink); }
+  header { background:var(--brown); color:#fff; padding:18px 16px; text-align:center; }
+  header h1 { margin:0; font-size:1.4rem; }
+  header p { margin:4px 0 0; opacity:.85; font-size:.9rem; }
+  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:20px; grid-template-columns:1fr; }
+  @media (min-width:800px){ main { grid-template-columns: 1.6fr 1fr; } }
+  h2 { font-size:1.05rem; margin:16px 0 8px; color:var(--brown); }
+  .card { background:#fff; border-radius:12px; padding:12px 14px; margin-bottom:10px;
+          box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .card small { color:#777; display:block; }
+  .price { font-weight:600; color:var(--accent); }
+  button { cursor:pointer; border:0; border-radius:8px; padding:8px 14px; background:var(--brown); color:#fff; font-size:.9rem; }
+  button.sm { padding:4px 10px; }
+  button.ghost { background:#eee; color:var(--ink); }
+  button:disabled { opacity:.5; cursor:default; }
+  .cart { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); position:sticky; top:12px; align-self:start; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:8px 0; }
+  input, textarea { width:100%; padding:9px; border:1px solid #ddd; border-radius:8px; font:inherit; margin-top:6px; }
+  .total { font-weight:700; font-size:1.1rem; border-top:1px dashed #ccc; padding-top:10px; margin-top:10px; }
+  .msg { padding:10px; border-radius:8px; margin-top:10px; font-size:.9rem; }
+  .ok { background:#e6f4e6; } .err { background:#fde8e8; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:99px; background:var(--accent); color:#fff; font-size:.8rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>☕ Warkop Online</h1>
+  <p>Pesan dari meja, tanpa antre</p>
+</header>
+<main>
+  <section id="menu"><p>Memuat menu…</p></section>
+  <aside class="cart">
+    <h2 style="margin-top:0">Keranjang</h2>
+    <div id="cartItems"><small>Belum ada pesanan</small></div>
+    <div class="total row"><span>Total</span><span id="total">Rp 0</span></div>
+    <input id="name" placeholder="Nama pemesan *">
+    <input id="table" placeholder="No. meja (opsional)">
+    <textarea id="notes" rows="2" placeholder="Catatan (less sugar, dll)"></textarea>
+    <button id="submit" style="width:100%;margin-top:10px">Kirim Pesanan</button>
+    <div id="result"></div>
+  </aside>
+</main>
+
+<script>
+const rp = (n) => 'Rp ' + n.toLocaleString('id-ID');
+let menu = [], cart = {};
+
+async function loadMenu() {
+  menu = await (await fetch('/api/menu')).json();
+  const groups = {};
+  menu.forEach((m) => (groups[m.category] ||= []).push(m));
+  const el = document.getElementById('menu');
+  el.innerHTML = '';
+  for (const [cat, items] of Object.entries(groups)) {
+    el.insertAdjacentHTML('beforeend', `<h2>${cat}</h2>`);
+    items.forEach((m) => {
+      const d = document.createElement('div');
+      d.className = 'card';
+      d.innerHTML = `<div><strong></strong><small></small><span class="price">${rp(m.price)}</span></div>
+                     <button class="sm">+ Tambah</button>`;
+      d.querySelector('strong').textContent = m.name;
+      d.querySelector('small').textContent = m.description || '';
+      d.querySelector('button').onclick = () => { cart[m.id] = (cart[m.id] || 0) + 1; renderCart(); };
+      el.appendChild(d);
+    });
+  }
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  const ids = Object.keys(cart);
+  let total = 0;
+  el.innerHTML = ids.length ? '' : '<small>Belum ada pesanan</small>';
+  ids.forEach((id) => {
+    const m = menu.find((x) => x.id == id);
+    total += m.price * cart[id];
+    const r = document.createElement('div');
+    r.className = 'row';
+    r.innerHTML = `<span></span><span><button class="sm ghost">−</button> <b>${cart[id]}</b> <button class="sm ghost">+</button></span>`;
+    r.firstChild.textContent = m.name;
+    const [minus, plus] = r.querySelectorAll('button');
+    minus.onclick = () => { if (--cart[id] <= 0) delete cart[id]; renderCart(); };
+    plus.onclick = () => { cart[id]++; renderCart(); };
+    el.appendChild(r);
+  });
+  document.getElementById('total').textContent = rp(total);
+}
+
+document.getElementById('submit').onclick = async () => {
+  const out = document.getElementById('result');
+  const btn = document.getElementById('submit');
+  const items = Object.entries(cart).map(([menu_id, qty]) => ({ menu_id: Number(menu_id), qty }));
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_name: document.getElementById('name').value,
+        table_no: document.getElementById('table').value,
+        notes: document.getElementById('notes').value,
+        items,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    cart = {}; renderCart();
+    out.innerHTML = `<div class="msg ok">Pesanan <b>#${data.id}</b> diterima! Total ${rp(data.total)}.<br>Status: <span class="badge" id="st">${data.status}</span></div>`;
+    track(data.id);
+  } catch (e) {
+    out.innerHTML = `<div class="msg err"></div>`;
+    out.firstChild.textContent = e.message;
+  } finally { btn.disabled = false; }
+};
+
+let timer;
+function track(id) {
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    const r = await fetch('/api/orders/' + id);
+    if (!r.ok) return;
+    const o = await r.json();
+    const st = document.getElementById('st');
+    if (st) st.textContent = o.status;
+    if (['selesai', 'batal'].includes(o.status)) clearInterval(timer);
+  }, 8000);
+}
+
+loadMenu();
+</script>
+</body>
+</html>
